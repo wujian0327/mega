@@ -1,16 +1,18 @@
+use std::{collections::HashMap, thread::sleep, time::Duration};
+
 use axum::async_trait;
 use common::config::ZTMConfig;
 use reqwest::{header::CONTENT_TYPE, Client};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ZTMUserPermit {
     pub ca: String,
     pub agent: CertAgent,
     pub bootstraps: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CertAgent {
     pub name: String,
     pub certificate: String,
@@ -285,7 +287,7 @@ impl ZTM for RemoteZTM {
 }
 
 pub async fn run_ztm_client(bootstrap_node: String, config: ZTMConfig, peer_id: String) {
-    let name = peer_id;
+    let name = peer_id.clone();
     let ztm: RemoteZTM = RemoteZTM { config };
 
     // 1. to get permit json from bootstrap_node
@@ -308,7 +310,7 @@ pub async fn run_ztm_client(bootstrap_node: String, config: ZTMConfig, peer_id: 
     };
 
     // 2. join ztm mesh
-    let mesh = match ztm.connect_ztm_hub(permit).await {
+    let mesh = match ztm.connect_ztm_hub(permit.clone()).await {
         Ok(m) => m,
         Err(s) => {
             tracing::error!(s);
@@ -341,6 +343,26 @@ pub async fn run_ztm_client(bootstrap_node: String, config: ZTMConfig, peer_id: 
         }
     }
     tracing::info!("create a ztm port successfully, port:{ztm_port}");
+
+    loop {
+        let url = format!("http://127.0.0.1:8002/ping");
+        let mut params = HashMap::new();
+        params.insert("peer_id", name.clone());
+        params.insert("hub", permit.bootstraps.get(0).unwrap().to_string());
+        params.insert("agent_name", name.clone());
+        params.insert("service_name", "mega".to_string());
+        let client = reqwest::Client::new();
+        let response = client.get(url).query(&params).send().await;
+        let response_text = match handle_ztm_response(response).await {
+            Ok(s) => s,
+            Err(s) => {
+                tracing::error!("GET localhost:8002/ping failed,{s}");
+                return;
+            }
+        };
+        tracing::info!("Get localhost:8002/ping, response: {response_text}");
+        sleep(Duration::from_secs(5));
+    }
 }
 
 pub async fn handle_ztm_response(
