@@ -13,7 +13,7 @@ pub struct RelayGetParams {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RelayPingRes {
+pub struct RelayResultRes {
     pub success: bool,
 }
 

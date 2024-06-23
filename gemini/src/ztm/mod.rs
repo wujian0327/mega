@@ -345,6 +345,7 @@ pub async fn run_ztm_client(bootstrap_node: String, config: ZTMConfig, peer_id: 
     tracing::info!("create a ztm port successfully, port:{ztm_port}");
 
     loop {
+        //ping
         let url = format!("http://127.0.0.1:8002/ping");
         let mut params = HashMap::new();
         params.insert("peer_id", name.clone());

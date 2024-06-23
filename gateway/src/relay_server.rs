@@ -5,14 +5,14 @@ use std::sync::Mutex;
 use crate::api_service;
 use crate::api_service::router::ApiServiceState;
 use axum::body::Body;
-use axum::extract::{Query, State};
+use axum::extract::{FromRequest, Query, State};
 use axum::http::{Request, Response, StatusCode, Uri};
 use axum::routing::get;
-use axum::Router;
+use axum::{Json, Router};
 use chrono::Utc;
 use common::config::{Config, ZTMConfig};
 use gemini::ztm::{RemoteZTM, ZTM};
-use gemini::{MegaType, RelayGetParams, RelayPingRes};
+use gemini::{MegaType, RelayGetParams, RelayResultRes};
 use jupiter::context::Context;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -94,8 +94,18 @@ impl TryFrom<RelayGetParams> for Node {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct RepoInfo {
+    pub name: String,
+    pub identifier: String,
+    pub origin: String,
+    pub update_time: i64,
+    pub commit: String,
+}
+
 lazy_static! {
     static ref NODELIST: Mutex<Vec<Node>> = Mutex::new(vec![]);
+    static ref REPOLIST: Mutex<Vec<RepoInfo>> = Mutex::new(vec![]);
 }
 
 pub async fn app(config: Config, host: String, port: u16) -> Router {
@@ -140,6 +150,8 @@ async fn get_method_router(
         return ping(params).await;
     } else if Regex::new(r"/nodo_list$").unwrap().is_match(uri.path()) {
         return nodo_list(params).await;
+    } else if Regex::new(r"/repo_list$").unwrap().is_match(uri.path()) {
+        return repo_list(params).await;
     } else if Regex::new(r"/certificate$").unwrap().is_match(uri.path()) {
         return certificate(ztm_config, params).await;
     }
@@ -151,10 +163,13 @@ async fn get_method_router(
 
 async fn post_method_router(
     state: State<AppState>,
-    _uri: Uri,
-    _req: Request<Body>,
+    uri: Uri,
+    req: Request<Body>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
     let _ztm_config = state.context.config.ztm.clone();
+    if Regex::new(r"/repo_provide$").unwrap().is_match(uri.path()) {
+        return repo_provide(state, req).await;
+    }
     Err((
         StatusCode::NOT_FOUND,
         String::from("Operation not supported\n"),
@@ -182,7 +197,7 @@ pub async fn ping(params: RelayGetParams) -> Result<Response<Body>, (StatusCode,
         }
         nodelist.push(node);
     }
-    let res = serde_json::to_string(&RelayPingRes { success: true }).unwrap();
+    let res = serde_json::to_string(&RelayResultRes { success: true }).unwrap();
     Ok(Response::builder()
         .header("Content-Type", "application/json")
         .body(Body::from(res))
@@ -192,6 +207,15 @@ pub async fn ping(params: RelayGetParams) -> Result<Response<Body>, (StatusCode,
 pub async fn nodo_list(_params: RelayGetParams) -> Result<Response<Body>, (StatusCode, String)> {
     let nodelist = NODELIST.lock().unwrap();
     let json_string = serde_json::to_string(&*nodelist).unwrap();
+    Ok(Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(json_string))
+        .unwrap())
+}
+
+pub async fn repo_list(_params: RelayGetParams) -> Result<Response<Body>, (StatusCode, String)> {
+    let repo_list = REPOLIST.lock().unwrap();
+    let json_string = serde_json::to_string(&*repo_list).unwrap();
     Ok(Response::builder()
         .header("Content-Type", "application/json")
         .body(Body::from(json_string))
@@ -221,6 +245,34 @@ pub async fn certificate(
     Ok(Response::builder()
         .header("Content-Type", "application/json")
         .body(Body::from(permit_json))
+        .unwrap())
+}
+
+pub async fn repo_provide(
+    state: State<AppState>,
+    req: Request<Body>,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let request = Json::from_request(req, &state)
+        .await
+        .unwrap_or_else(|_| Json(RepoInfo::default()));
+    let repo_info: RepoInfo = request.0;
+    if repo_info.identifier.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "paras invalid".to_string()));
+    }
+    {
+        let mut repo_list = REPOLIST.lock().unwrap();
+        if let Some(pos) = repo_list
+            .iter()
+            .position(|r| r.identifier == repo_info.identifier)
+        {
+            repo_list.remove(pos);
+        }
+        repo_list.push(repo_info);
+    }
+    let res = serde_json::to_string(&RelayResultRes { success: true }).unwrap();
+    Ok(Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(res))
         .unwrap())
 }
 
