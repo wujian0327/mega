@@ -121,9 +121,7 @@ pub trait RawStorage: Sync + Send {
 
 pub async fn init(storage_type: String, base_path: PathBuf) -> Arc<dyn RawStorage> {
     match storage_type.as_str() {
-        "LOCAL" => {
-            Arc::new(LocalStorage::init(base_path))
-        }
+        "LOCAL" => Arc::new(LocalStorage::init(base_path)),
         // "REMOTE" => Arc::new(RemoteStorage::init(path).await),
         _ => unreachable!(
             "Not supported config, MEGA_OBJ_STORAGE_TYPE should be 'LOCAL' or 'REMOTE'"
