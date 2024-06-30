@@ -1,9 +1,13 @@
 use std::{collections::HashMap, thread::sleep, time::Duration};
 
 use axum::async_trait;
-use common::config::ZTMConfig;
+use common::config::{Config, ZTMConfig};
+use jupiter::context::Context;
 use reqwest::{header::CONTENT_TYPE, Client};
 use serde::{Deserialize, Serialize};
+use venus::import_repo::repo::Repo;
+
+use crate::RepoInfo;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ZTMUserPermit {
@@ -286,9 +290,11 @@ impl ZTM for RemoteZTM {
     }
 }
 
-pub async fn run_ztm_client(bootstrap_node: String, config: ZTMConfig, peer_id: String) {
+pub async fn run_ztm_client(bootstrap_node: String, config: Config, peer_id: String) {
+    let ztm_config = config.clone().ztm;
     let name = peer_id.clone();
-    let ztm: RemoteZTM = RemoteZTM { config };
+    let ztm: RemoteZTM = RemoteZTM { config: ztm_config };
+    let context = Context::new(config.clone()).await;
 
     // 1. to get permit json from bootstrap_node
     // GET {bootstrap_node}/api/v1/certificate?name={name}
@@ -343,27 +349,106 @@ pub async fn run_ztm_client(bootstrap_node: String, config: ZTMConfig, peer_id: 
         }
     }
     tracing::info!("create a ztm port successfully, port:{ztm_port}");
+    let peer_id_clone = peer_id.clone();
+    let ping = tokio::spawn(async move {
+        loop {
+            ping(
+                peer_id_clone.clone(),
+                permit.bootstraps.get(0).unwrap().to_string(),
+            )
+            .await;
+            sleep(Duration::from_secs(5));
+        }
+    });
+    let share_repo = tokio::spawn(async move {
+        loop {
+            // let path = Path::new("/third-part/mega_143").to_path_buf();
+            // let mut res = MonoRepo {
+            //     context,
+            //     path,
+            //     from_hash: None,
+            //     to_hash: None,
+            // };
+            let git_model = context
+                .services
+                .git_db_storage
+                .find_git_repo("/third-part/mega_143")
+                .await;
 
-    loop {
-        //ping
-        let url = format!("http://127.0.0.1:8002/ping");
-        let mut params = HashMap::new();
-        params.insert("peer_id", name.clone());
-        params.insert("hub", permit.bootstraps.get(0).unwrap().to_string());
-        params.insert("agent_name", name.clone());
-        params.insert("service_name", "mega".to_string());
-        let client = reqwest::Client::new();
-        let response = client.get(url).query(&params).send().await;
-        let response_text = match handle_ztm_response(response).await {
-            Ok(s) => s,
-            Err(s) => {
-                tracing::error!("GET localhost:8002/ping failed,{s}");
-                return;
-            }
-        };
-        tracing::info!("Get localhost:8002/ping, response: {response_text}");
-        sleep(Duration::from_secs(5));
-    }
+            let git_model = match git_model {
+                Ok(r) => {
+                    if r.is_some() {
+                        r.unwrap()
+                    } else {
+                        return;
+                    }
+                }
+                Err(_) => return,
+            };
+            tracing::info!("git_model:{:?}", git_model);
+            let repo: Repo = git_model.clone().into();
+            let git_ref = context
+                .services
+                .git_db_storage
+                .get_default_ref(&repo)
+                .await
+                .unwrap()
+                .unwrap();
+
+            let name = git_model.repo_name;
+            let identifier = format!("p2p://{}/{name}", peer_id.clone());
+            let update_time = git_model.created_at.and_utc().timestamp();
+            let repo_info = RepoInfo {
+                name,
+                identifier,
+                origin: peer_id.clone(),
+                update_time,
+                commit: git_ref.ref_hash,
+            };
+            share_repo(repo_info).await;
+            sleep(Duration::from_secs(5));
+        }
+    });
+    let _ = tokio::join!(ping, share_repo);
+}
+
+pub async fn ping(peer_id: String, hub: String) {
+    let url = format!("http://127.0.0.1:8002/ping");
+    let mut params = HashMap::new();
+    params.insert("peer_id", peer_id.clone());
+    params.insert("hub", hub);
+    params.insert("agent_name", peer_id.clone());
+    params.insert("service_name", peer_id.clone());
+    let client = reqwest::Client::new();
+    let response = client.get(url).query(&params).send().await;
+    let response_text = match handle_ztm_response(response).await {
+        Ok(s) => s,
+        Err(s) => {
+            tracing::error!("GET localhost:8002/ping failed,{s}");
+            return;
+        }
+    };
+    tracing::info!("Get localhost:8002/ping, response: {response_text}");
+}
+
+pub async fn share_repo(repo_info: RepoInfo) {
+    let url = format!("http://127.0.0.1:8002/repo_provide");
+    let client = Client::new();
+    let req_string = serde_json::to_string(&repo_info).unwrap();
+    let response = client
+        .post(url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(req_string)
+        .send()
+        .await;
+    let response_text = match handle_ztm_response(response).await {
+        Ok(s) => s,
+        Err(s) => {
+            tracing::error!("GET localhost:8002/repo_provide failed,{s}");
+            return;
+        }
+    };
+    tracing::info!("Get localhost:8002/repo_provide, response: {response_text}");
 }
 
 pub async fn handle_ztm_response(

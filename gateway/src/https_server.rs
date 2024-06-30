@@ -89,7 +89,7 @@ pub async fn https_server(config: Config, options: HttpsOptions) {
         https_port,
     } = options.clone();
 
-    check_run_with_ztm(config.clone(), options.common);
+    check_run_with_ztm(config.clone(), options.common).await;
 
     let app = app(config, host.clone(), https_port).await;
 
@@ -110,7 +110,7 @@ pub async fn http_server(config: Config, options: HttpOptions) {
         http_port,
     } = options.clone();
 
-    check_run_with_ztm(config.clone(), options.common);
+    check_run_with_ztm(config.clone(), options.common).await;
 
     let app = app(config, host.clone(), http_port).await;
 
@@ -244,17 +244,16 @@ async fn put_method_router(
     }
 }
 
-pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
+pub async fn check_run_with_ztm(config: Config, common: CommonOptions) {
     let ztm_type = match common.ztm {
         Some(z) => z,
         None => {
             return;
         }
     };
+
     match ztm_type {
         ZtmType::Agent => {
-            //Mega server join a ztm mesh
-            let config = config.ztm;
             let bootstrap_node = match common.bootstrap_node {
                 Some(n) => n,
                 None => {
@@ -262,7 +261,8 @@ pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
                     return;
                 }
             };
-            let peer_id = "123".to_string();
+            let (peer_id, _) = vault::init();
+            // let peer_id = "123".to_string();
             tokio::spawn(async move { run_ztm_client(bootstrap_node, config, peer_id).await });
         }
         ZtmType::Relay => {
