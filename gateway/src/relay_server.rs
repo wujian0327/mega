@@ -9,8 +9,9 @@ use axum::extract::{FromRequest, Query, State};
 use axum::http::{Request, Response, StatusCode, Uri};
 use axum::routing::get;
 use axum::{Json, Router};
+use callisto::{ztm_node, ztm_repo_info};
 use common::config::{Config, ZTMConfig};
-use gemini::ztm::{RemoteZTM, ZTM};
+use gemini::ztm::{RemoteZTM, ZTMAgent, ZTMCA};
 use gemini::{Node, RepoInfo};
 use gemini::{RelayGetParams, RelayResultRes};
 use jupiter::context::Context;
@@ -95,11 +96,11 @@ async fn get_method_router(
     if Regex::new(r"/hello$").unwrap().is_match(uri.path()) {
         return hello_relay(params).await;
     } else if Regex::new(r"/ping$").unwrap().is_match(uri.path()) {
-        return ping(params).await;
-    } else if Regex::new(r"/nodo_list$").unwrap().is_match(uri.path()) {
-        return nodo_list(params).await;
+        return ping(state, params).await;
+    } else if Regex::new(r"/node_list$").unwrap().is_match(uri.path()) {
+        return node_list(state, params).await;
     } else if Regex::new(r"/repo_list$").unwrap().is_match(uri.path()) {
-        return repo_list(params).await;
+        return repo_list(state, params).await;
     } else if Regex::new(r"/certificate$").unwrap().is_match(uri.path()) {
         return certificate(ztm_config, params).await;
     }
@@ -128,48 +129,6 @@ pub async fn hello_relay(_params: RelayGetParams) -> Result<Response<Body>, (Sta
     Ok(Response::builder().body(Body::from("hello relay")).unwrap())
 }
 
-pub async fn ping(params: RelayGetParams) -> Result<Response<Body>, (StatusCode, String)> {
-    let node = match Node::try_from(params) {
-        Ok(n) => n,
-        Err(_) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "invalid paras".to_string(),
-            ));
-        }
-    };
-    {
-        let mut nodelist = NODELIST.lock().unwrap();
-        if let Some(pos) = nodelist.iter().position(|n| n.peer_id == node.peer_id) {
-            nodelist.remove(pos);
-        }
-        nodelist.push(node);
-    }
-    let res = serde_json::to_string(&RelayResultRes { success: true }).unwrap();
-    Ok(Response::builder()
-        .header("Content-Type", "application/json")
-        .body(Body::from(res))
-        .unwrap())
-}
-
-pub async fn nodo_list(_params: RelayGetParams) -> Result<Response<Body>, (StatusCode, String)> {
-    let nodelist = NODELIST.lock().unwrap();
-    let json_string = serde_json::to_string(&*nodelist).unwrap();
-    Ok(Response::builder()
-        .header("Content-Type", "application/json")
-        .body(Body::from(json_string))
-        .unwrap())
-}
-
-pub async fn repo_list(_params: RelayGetParams) -> Result<Response<Body>, (StatusCode, String)> {
-    let repo_list = REPOLIST.lock().unwrap();
-    let json_string = serde_json::to_string(&*repo_list).unwrap();
-    Ok(Response::builder()
-        .header("Content-Type", "application/json")
-        .body(Body::from(json_string))
-        .unwrap())
-}
-
 pub async fn certificate(
     config: ZTMConfig,
     params: RelayGetParams,
@@ -196,10 +155,61 @@ pub async fn certificate(
         .unwrap())
 }
 
+pub async fn ping(
+    state: State<AppState>,
+    params: RelayGetParams,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let storage = state.context.services.ztm_storage.clone();
+    let node: ztm_node::Model = match params.try_into() {
+        Ok(n) => n,
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid paras".to_string(),
+            ));
+        }
+    };
+    match storage.insert_or_update_node(node).await {
+        Ok(_) => {
+            let res = serde_json::to_string(&RelayResultRes { success: true }).unwrap();
+            return Ok(Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(res))
+                .unwrap());
+        }
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid paras".to_string(),
+            ));
+        }
+    };
+}
+
+pub async fn node_list(
+    state: State<AppState>,
+    _params: RelayGetParams,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let storage = state.context.services.ztm_storage.clone();
+    let nodelist: Vec<Node> = storage
+        .get_all_node()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|x| x.into())
+        .collect();
+    let json_string = serde_json::to_string(&nodelist).unwrap();
+    Ok(Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(json_string))
+        .unwrap())
+}
+
 pub async fn repo_provide(
     state: State<AppState>,
     req: Request<Body>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
+    let storage = state.context.services.ztm_storage.clone();
     let request = Json::from_request(req, &state)
         .await
         .unwrap_or_else(|_| Json(RepoInfo::default()));
@@ -207,20 +217,40 @@ pub async fn repo_provide(
     if repo_info.identifier.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "paras invalid".to_string()));
     }
-    {
-        let mut repo_list = REPOLIST.lock().unwrap();
-        if let Some(pos) = repo_list
-            .iter()
-            .position(|r| r.identifier == repo_info.identifier)
-        {
-            repo_list.remove(pos);
+    let repo_info_model: ztm_repo_info::Model = repo_info.into();
+    match storage.insert_or_update_repo_info(repo_info_model).await {
+        Ok(_) => {
+            let res = serde_json::to_string(&RelayResultRes { success: true }).unwrap();
+            return Ok(Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(res))
+                .unwrap());
         }
-        repo_list.push(repo_info);
-    }
-    let res = serde_json::to_string(&RelayResultRes { success: true }).unwrap();
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid paras".to_string(),
+            ));
+        }
+    };
+}
+
+pub async fn repo_list(
+    state: State<AppState>,
+    _params: RelayGetParams,
+) -> Result<Response<Body>, (StatusCode, String)> {
+    let storage = state.context.services.ztm_storage.clone();
+    let repo_info_list: Vec<RepoInfo> = storage
+        .get_all_repo_info()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|x| x.into())
+        .collect();
+    let json_string = serde_json::to_string(&repo_info_list).unwrap();
     Ok(Response::builder()
         .header("Content-Type", "application/json")
-        .body(Body::from(res))
+        .body(Body::from(json_string))
         .unwrap())
 }
 

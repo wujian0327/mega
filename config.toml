@@ -22,7 +22,7 @@ max_connection = 32
 min_connection = 16
 
 # Whether to disabling SQLx Log
-sqlx_logging = false
+sqlx_logging = true
 
 
 [ssh]

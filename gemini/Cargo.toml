@@ -22,4 +22,5 @@ chrono = { workspace = true }
 jupiter = { workspace = true }
 ceres = { workspace = true }
 venus = { workspace = true }
+callisto = { workspace = true }
 #rust-ztm = { git = "https://github.com/flomesh-io/rust-ztm.git" }

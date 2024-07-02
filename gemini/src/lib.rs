@@ -1,6 +1,6 @@
+use callisto::{ztm_node, ztm_repo_info};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-
 pub mod http;
 pub mod ztm;
 
@@ -20,13 +20,13 @@ pub struct RelayResultRes {
 
 #[derive(Debug)]
 pub enum MegaType {
-    Mega,
+    Agent,
     Relay,
 }
 impl MegaType {
     pub fn to_string(&self) -> String {
         match self {
-            MegaType::Mega => "Mega".to_string(),
+            MegaType::Agent => "Agent".to_string(),
             MegaType::Relay => "Relay".to_string(),
         }
     }
@@ -59,18 +59,54 @@ impl TryFrom<RelayGetParams> for Node {
         {
             return Err(ConversionError::InvalidParas);
         }
-        // 获取当前时间
-        let now = Utc::now();
-        let timestamp_milliseconds = now.timestamp_millis();
+        let now = Utc::now().timestamp_millis();
         Ok(Node {
             peer_id: paras.peer_id.unwrap(),
             hub: paras.hub.unwrap(),
             agent_name: paras.agent_name.unwrap(),
             service_name: paras.service_name.unwrap(),
-            mega_type: MegaType::Mega.to_string(),
+            mega_type: MegaType::Agent.to_string(),
             online: true,
-            last_online_time: timestamp_milliseconds,
+            last_online_time: now,
         })
+    }
+}
+
+impl TryFrom<RelayGetParams> for ztm_node::Model {
+    type Error = ConversionError;
+
+    fn try_from(paras: RelayGetParams) -> Result<Self, Self::Error> {
+        if paras.peer_id.is_none()
+            || paras.hub.is_none()
+            || paras.agent_name.is_none()
+            || paras.service_name.is_none()
+        {
+            return Err(ConversionError::InvalidParas);
+        }
+        let now = Utc::now().timestamp_millis();
+        Ok(ztm_node::Model {
+            peer_id: paras.peer_id.unwrap(),
+            hub: paras.hub.unwrap(),
+            agent_name: paras.agent_name.unwrap(),
+            service_name: paras.service_name.unwrap(),
+            r#type: MegaType::Agent.to_string(),
+            online: true,
+            last_online_time: now,
+        })
+    }
+}
+
+impl From<ztm_node::Model> for Node {
+    fn from(n: ztm_node::Model) -> Self {
+        Node {
+            peer_id: n.peer_id,
+            hub: n.hub,
+            agent_name: n.agent_name,
+            service_name: n.service_name,
+            mega_type: n.r#type,
+            online: n.online,
+            last_online_time: n.last_online_time,
+        }
     }
 }
 
@@ -81,4 +117,28 @@ pub struct RepoInfo {
     pub origin: String,
     pub update_time: i64,
     pub commit: String,
+}
+
+impl From<RepoInfo> for ztm_repo_info::Model {
+    fn from(r: RepoInfo) -> Self {
+        ztm_repo_info::Model {
+            identifier: r.identifier,
+            name: r.name,
+            origin: r.origin,
+            update_time: r.update_time,
+            commit: r.commit,
+        }
+    }
+}
+
+impl From<ztm_repo_info::Model> for RepoInfo {
+    fn from(r: ztm_repo_info::Model) -> Self {
+        RepoInfo {
+            identifier: r.identifier,
+            name: r.name,
+            origin: r.origin,
+            update_time: r.update_time,
+            commit: r.commit,
+        }
+    }
 }
