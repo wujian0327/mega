@@ -20,5 +20,7 @@ tracing = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
 chrono = { workspace = true }
 jupiter = { workspace = true }
+vault = { workspace = true }
 callisto = { workspace = true }
-rust-ztm = { git = "https://github.com/flomesh-io/rust-ztm.git" }
+#rust-ztm = { git = "https://github.com/flomesh-io/rust-ztm.git" }
+rust-ztm = { git = "https://github.com/wujian0327/rust-ztm.git" }

@@ -1,15 +1,33 @@
-use std::{collections::HashMap, thread::sleep, time::Duration};
+use std::{
+    collections::HashMap,
+    thread::{self, sleep},
+    time::{self, Duration},
+};
 
 use axum::async_trait;
 use common::config::{Config, ZTMConfig};
 use reqwest::{header::CONTENT_TYPE, Client};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use vault::vault::{read_secret, write_secret};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ZTMUserPermit {
     pub ca: String,
     pub agent: CertAgent,
     pub bootstraps: Vec<String>,
+}
+
+impl ZTMUserPermit {
+    pub fn to_json_map(&self) -> serde_json::Map<String, Value> {
+        let value = serde_json::to_value(&self.clone()).unwrap();
+        serde_json::from_str(&value.to_string()).unwrap()
+    }
+
+    pub fn from_json_map(map: serde_json::Map<String, Value>) -> ZTMUserPermit {
+        let permit: ZTMUserPermit = serde_json::from_value(Value::Object(map)).unwrap();
+        permit
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -264,11 +282,11 @@ impl ZTMAgent for RemoteZTM {
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalZTM {
+pub struct LocalZTMAgent {
     pub agent_port: u16,
 }
 
-impl LocalZTM {
+impl LocalZTMAgent {
     pub fn start_ztm_agent(self) {
         tokio::spawn(async move {
             rust_ztm::start_agent("ztm_agent.db", self.agent_port);
@@ -276,12 +294,27 @@ impl LocalZTM {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct LocalZTMHub {
+    pub hub_port: u16,
+    pub ca: String,
+    pub name: Vec<String>,
+}
+
+impl LocalZTMHub {
+    pub fn start_ztm_hub(self) {
+        tokio::spawn(async move {
+            rust_ztm::start_hub(self.hub_port, self.name, &self.ca);
+        });
+    }
+}
+
 #[async_trait]
-impl ZTMAgent for LocalZTM {
+impl ZTMAgent for LocalZTMAgent {
     async fn connect_ztm_hub(&self, permit: ZTMUserPermit) -> Result<ZTMMesh, String> {
         // POST {agent}/api/meshes/${meshName}
         let permit_string = serde_json::to_string(&permit).unwrap();
-        tracing::info!("permit_string:{permit_string}");
+        // tracing::info!("permit_string:{permit_string}");
         let agent_port = self.agent_port;
         let agent_address = format!("http://127.0.0.1:{agent_port}");
         let url = format!("{agent_address}/api/meshes/{MESH_NAME}");
@@ -382,27 +415,42 @@ pub async fn run_ztm_client(
     bootstrap_node: String,
     _config: Config,
     peer_id: String,
-    agent: LocalZTM,
+    agent: LocalZTMAgent,
 ) {
     let name = peer_id.clone();
     // let _context = Context::new(config.clone()).await;
-
-    // 1. to get permit json from bootstrap_node
-    // GET {bootstrap_node}/api/v1/certificate?name={name}
-    let url = format!("{bootstrap_node}/api/v1/certificate?name={name}");
-    let request_result = reqwest::get(url).await;
-    let response_text = match handle_ztm_response(request_result).await {
-        Ok(s) => s,
-        Err(s) => {
-            tracing::error!("GET {bootstrap_node}/api/v1/certificate?name={name} failed,{s}");
-            return;
+    let local_permit_option = read_secret(peer_id.as_str()).unwrap();
+    let permit: ZTMUserPermit = match local_permit_option {
+        Some(res) => {
+            let p = ZTMUserPermit::from_json_map(res.data.unwrap());
+            tracing::info!("read ztm permit file from vault:{:?}", p);
+            p
         }
-    };
-    let permit: ZTMUserPermit = match serde_json::from_slice(response_text.as_bytes()) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!("{}", e);
-            return;
+        None => {
+            //generate permit from bootstrap_node
+            // 1. to get permit json from bootstrap_node
+            // GET {bootstrap_node}/api/v1/certificate?name={name}
+            let url = format!("{bootstrap_node}/api/v1/certificate?name={name}");
+            let request_result = reqwest::get(url).await;
+            let response_text = match handle_ztm_response(request_result).await {
+                Ok(s) => s,
+                Err(s) => {
+                    tracing::error!(
+                        "GET {bootstrap_node}/api/v1/certificate?name={name} failed,{s}"
+                    );
+                    return;
+                }
+            };
+            let permit: ZTMUserPermit = match serde_json::from_slice(response_text.as_bytes()) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("{}", e);
+                    return;
+                }
+            };
+            //save to vault
+            write_secret(peer_id.clone().as_str(), Some(permit.to_json_map().clone())).unwrap();
+            permit
         }
     };
 

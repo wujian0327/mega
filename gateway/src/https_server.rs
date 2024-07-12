@@ -1,8 +1,10 @@
+use core::time;
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::thread::{self};
 
 use anyhow::Result;
 use axum::body::Body;
@@ -14,7 +16,7 @@ use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Args;
 use common::enums::ZtmType;
-use gemini::ztm::{run_ztm_client, LocalZTM};
+use gemini::ztm::{run_ztm_client, LocalZTMAgent, LocalZTMHub};
 use regex::Regex;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
@@ -30,6 +32,7 @@ use jupiter::raw_storage::local_storage::LocalStorage;
 
 use crate::api::api_router::{self};
 use crate::api::ApiServiceState;
+use crate::ca_server::run_ca_server;
 use crate::lfs;
 use crate::relay_server::run_relay_server;
 
@@ -270,11 +273,40 @@ pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
                 }
             };
             let (peer_id, _) = vault::init();
-            let ztm: LocalZTM = LocalZTM { agent_port: 7778 };
-            ztm.clone().start_ztm_agent();
-            tokio::spawn(async move { run_ztm_client(bootstrap_node, config, peer_id, ztm).await });
+            let ztm_agent: LocalZTMAgent = LocalZTMAgent {
+                agent_port: common.ztm_agent_port,
+            };
+            ztm_agent.clone().start_ztm_agent();
+            thread::sleep(time::Duration::from_secs(3));
+            tokio::spawn(async move {
+                run_ztm_client(bootstrap_node, config, peer_id, ztm_agent).await
+            });
         }
         ZtmType::Relay => {
+            //Start a sub thread to ca server
+            let config_clone = config.clone();
+            let host_clone = common.host.clone();
+            let ca_port = common.ca_port;
+            tokio::spawn(async move { run_ca_server(config_clone, host_clone, ca_port).await });
+            thread::sleep(time::Duration::from_secs(3));
+
+            //Start a sub thread to run ztm-hub
+            let ca = format!("localhost:{ca_port}");
+            let ztm_hub: LocalZTMHub = LocalZTMHub {
+                hub_port: common.ztm_hub_port,
+                ca: ca,
+                name: vec!["relay".to_string()],
+            };
+            ztm_hub.clone().start_ztm_hub();
+            thread::sleep(time::Duration::from_secs(3));
+
+            // //Start a sub thread to run ztm-agent
+            // let ztm_agent: LocalZTMAgent = LocalZTMAgent {
+            //     agent_port: common.ztm_agent_port,
+            // };
+            // ztm_agent.clone().start_ztm_agent();
+            // thread::sleep(time::Duration::from_secs(3));
+
             //Start a sub thread to run relay server
             let config_clone = config.clone();
             let host_clone = common.host.clone();

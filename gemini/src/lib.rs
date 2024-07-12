@@ -4,6 +4,7 @@ use callisto::{ztm_node, ztm_repo_info};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+pub mod ca;
 pub mod http;
 pub mod ztm;
 

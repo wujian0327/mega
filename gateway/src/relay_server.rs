@@ -23,16 +23,16 @@ use crate::api::ApiServiceState;
 pub async fn run_relay_server(config: Config, host: String, port: u16) {
     let app = app(config.clone(), host.clone(), port).await;
 
-    let ztm_config = config.ztm;
-    match relay_connect_ztm(ztm_config, port).await {
-        Ok(s) => {
-            tracing::info!("relay connect ztm success: {s}");
-        }
-        Err(e) => {
-            tracing::error!("relay connect ztm failed : {e}");
-            return;
-        }
-    }
+    // let ztm_config = config.ztm;
+    // match relay_connect_ztm(ztm_config, port).await {
+    //     Ok(s) => {
+    //         tracing::info!("relay connect ztm success: {s}");
+    //     }
+    //     Err(e) => {
+    //         tracing::error!("relay connect ztm failed : {e}");
+    //         return;
+    //     }
+    // }
 
     let server_url = format!("{}:{}", host, port);
     tracing::info!("start relay server: {server_url}");
