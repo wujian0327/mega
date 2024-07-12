@@ -71,7 +71,7 @@ async fn get_method_router(
     Query(_params): Query<RelayGetParams>,
     uri: Uri,
 ) -> Result<Response<Body>, (StatusCode, String)> {
-    if Regex::new(r"/certificates/[a-z0-9]+$")
+    if Regex::new(r"/certificates/[a-zA-Z0-9]+$")
         .unwrap()
         .is_match(uri.path())
     {
@@ -98,7 +98,7 @@ async fn post_method_router(
     req: Request<Body>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
     let _ztm_config = state.context.config.ztm.clone();
-    if Regex::new(r"/certificates/[a-z0-9]+$")
+    if Regex::new(r"/certificates/[a-zA-Z0-9]+$")
         .unwrap()
         .is_match(uri.path())
     {
@@ -112,7 +112,7 @@ async fn post_method_router(
             }
         };
         return gemini::ca::issue_certificate(name).await;
-    } else if Regex::new(r"/sign/hub/[a-z0-9]+$")
+    } else if Regex::new(r"/sign/hub/[a-zA-Z0-9]+$")
         .unwrap()
         .is_match(uri.path())
     {
@@ -140,7 +140,7 @@ async fn delete_method_router(
     uri: Uri,
     _req: Request<Body>,
 ) -> Result<Response<Body>, (StatusCode, String)> {
-    if Regex::new(r"/certificates/[a-z0-9]+$")
+    if Regex::new(r"/certificates/[a-zA-Z0-9]+$")
         .unwrap()
         .is_match(uri.path())
     {
