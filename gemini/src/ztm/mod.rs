@@ -458,6 +458,7 @@ pub async fn run_ztm_client(
     let mesh = match agent.connect_ztm_hub(permit.clone()).await {
         Ok(m) => m,
         Err(s) => {
+            tracing::error!("join ztm mesh failed");
             tracing::error!(s);
             return;
         }
@@ -465,28 +466,28 @@ pub async fn run_ztm_client(
     tracing::info!("connect to ztm hub successfully");
 
     // 3. create a ztm port for relay
-    let ztm_port = 8002;
-    match agent
-        .create_ztm_port(mesh.agent.id, "relay".to_string(), ztm_port)
-        .await
-    {
-        Ok(_) => (),
-        Err(s) => {
-            tracing::error!("create a ztm port failed, {s}");
-            return;
-        }
-    }
-    tracing::info!("create a ztm port successfully, port:{ztm_port}");
-    let peer_id_clone = peer_id.clone();
-    loop {
-        ping(
-            peer_id_clone.clone(),
-            permit.bootstraps.first().unwrap().to_string(),
-            ztm_port,
-        )
-        .await;
-        sleep(Duration::from_secs(15));
-    }
+    // let ztm_port = 8002;
+    // match agent
+    //     .create_ztm_port(mesh.agent.id, "relay".to_string(), ztm_port)
+    //     .await
+    // {
+    //     Ok(_) => (),
+    //     Err(s) => {
+    //         tracing::error!("create a ztm port failed, {s}");
+    //         return;
+    //     }
+    // }
+    // tracing::info!("create a ztm port successfully, port:{ztm_port}");
+    // let peer_id_clone = peer_id.clone();
+    // loop {
+    //     ping(
+    //         peer_id_clone.clone(),
+    //         permit.bootstraps.first().unwrap().to_string(),
+    //         ztm_port,
+    //     )
+    //     .await;
+    //     sleep(Duration::from_secs(15));
+    // }
 }
 
 pub async fn ping(peer_id: String, hub: String, ztm_port: u16) {
