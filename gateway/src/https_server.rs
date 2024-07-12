@@ -288,7 +288,7 @@ pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
             let host_clone = common.host.clone();
             let ca_port = common.ca_port;
             tokio::spawn(async move { run_ca_server(config_clone, host_clone, ca_port).await });
-            thread::sleep(time::Duration::from_secs(3));
+            thread::sleep(time::Duration::from_secs(5));
 
             //Start a sub thread to run ztm-hub
             let ca = format!("localhost:{ca_port}");
@@ -298,7 +298,7 @@ pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
                 name: vec!["relay".to_string()],
             };
             ztm_hub.clone().start_ztm_hub();
-            thread::sleep(time::Duration::from_secs(3));
+            thread::sleep(time::Duration::from_secs(5));
 
             // //Start a sub thread to run ztm-agent
             // let ztm_agent: LocalZTMAgent = LocalZTMAgent {
