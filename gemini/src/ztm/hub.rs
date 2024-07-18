@@ -63,7 +63,7 @@ pub struct LocalHub {
 impl ZTMCA for LocalHub {
     async fn create_ztm_certificate(&self, name: String) -> Result<ZTMUserPermit, String> {
         let ca_port = self.ca_port;
-        let ca_address = format!("localhost:{ca_port}");
+        let ca_address = format!("http://localhost:{ca_port}");
 
         //1. GET {ca}/api/certificates/ca -> ca certificate
         let url = format!("{ca_address}/api/certificates/ca");
@@ -103,7 +103,7 @@ impl ZTMCA for LocalHub {
             private_key: user_key.clone(),
         };
 
-        let hub_address = format!("http://{}:{}", self.host, self.hub_port);
+        let hub_address = format!("{}:{}", self.host, self.hub_port);
         let permit = ZTMUserPermit {
             ca: ca_certificate.clone(),
             agent,

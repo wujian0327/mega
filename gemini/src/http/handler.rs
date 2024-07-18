@@ -34,7 +34,7 @@ pub async fn repo_provide(
     let git_model = context
         .services
         .git_db_storage
-        .find_git_repo(path.as_str())
+        .find_git_repo_by_path(path.as_str())
         .await;
 
     let git_model = match git_model {
@@ -77,6 +77,7 @@ pub async fn repo_folk(
     ztm_agent_port: u16,
     params: GetParams,
 ) -> Result<Response<Body>, (StatusCode, String)> {
+    tracing::info!("params:{:?}", params);
     let identifier = match params.identifier.clone() {
         Some(i) => i,
         None => {
@@ -92,7 +93,15 @@ pub async fn repo_folk(
             return Err((StatusCode::BAD_REQUEST, String::from("Port not provide\n")));
         }
     };
-    let remote_peer_id = match get_peer_id_from_identifier(identifier) {
+    let remote_peer_id = match get_peer_id_from_identifier(identifier.clone()) {
+        Ok(p) => p,
+        Err(e) => return Err((StatusCode::BAD_REQUEST, String::from(e))),
+    };
+    let remote_port = match get_remote_port_from_identifier(identifier.clone()) {
+        Ok(p) => p,
+        Err(e) => return Err((StatusCode::BAD_REQUEST, String::from(e))),
+    };
+    let git_path = match get_git_path_from_identifier(identifier) {
         Ok(p) => p,
         Err(e) => return Err((StatusCode::BAD_REQUEST, String::from(e))),
     };
@@ -142,7 +151,7 @@ pub async fn repo_folk(
             "ztm".to_string(),
             "tunnel".to_string(),
             bound_name,
-            8000,
+            remote_port,
         )
         .await
     {
@@ -154,8 +163,8 @@ pub async fn repo_folk(
             return Err((StatusCode::INTERNAL_SERVER_ERROR, String::from(s)));
         }
     }
-
-    Ok(Response::builder().body(Body::from("success")).unwrap())
+    let msg = format!("Success, you can try to clone the repo like this:\ngit clone http://localhost:{port}/{git_path}");
+    Ok(Response::builder().body(Body::from(msg)).unwrap())
 }
 
 pub fn get_peer_id_from_identifier(identifier: String) -> Result<String, String> {
@@ -165,6 +174,28 @@ pub fn get_peer_id_from_identifier(identifier: String) -> Result<String, String>
         return Err("invalid identifier".to_string());
     }
     return Ok(words.get(2).unwrap().to_string());
+}
+
+pub fn get_remote_port_from_identifier(identifier: String) -> Result<u16, String> {
+    // p2p://mrJ46F8gd2sa2Dx3iCYf6DauJ2WpAaepus7PwyZVebgD/8000/third-part/mega_143.git
+    let words: Vec<&str> = identifier.split("/").collect();
+    if words.len() <= 3 {
+        return Err("invalid identifier".to_string());
+    }
+    match words.get(3).unwrap().parse::<u16>() {
+        Ok(number) => Ok(number),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+pub fn get_git_path_from_identifier(identifier: String) -> Result<String, String> {
+    // p2p://mrJ46F8gd2sa2Dx3iCYf6DauJ2WpAaepus7PwyZVebgD/8000/third-part/mega_143.git
+    let words: Vec<&str> = identifier.split("/").collect();
+    if words.len() <= 4 {
+        return Err("invalid identifier".to_string());
+    }
+    let path = words[4..].join("/");
+    Ok(path)
 }
 
 pub fn get_short_peer_id(peer_id: String) -> String {
