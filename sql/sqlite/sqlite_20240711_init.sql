@@ -234,7 +234,8 @@ CREATE TABLE IF NOT EXISTS "ztm_node" (
   "service_name" TEXT,
   "type" TEXT,
   "online" INTEGER NOT NULL,
-  "last_online_time" INTEGER NOT NULL
+  "last_online_time" INTEGER NOT NULL,
+  "service_port" INT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "ztm_repo_info" (

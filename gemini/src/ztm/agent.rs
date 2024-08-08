@@ -372,45 +372,9 @@ pub async fn run_ztm_client(
     _config: Config,
     peer_id: String,
     agent: LocalZTMAgent,
+    http_port: u16,
 ) {
-    let name = peer_id.clone();
-    // let _context = Context::new(config.clone()).await;
-
-    // let local_permit_option = read_secret(peer_id.as_str()).unwrap();
-    // let permit: ZTMUserPermit = match local_permit_option {
-    //     Some(res) => {
-    //         let p = ZTMUserPermit::from_json_map(res.data.unwrap());
-    //         tracing::info!("read ztm permit file from vault:{:?}", p);
-    //         p
-    //     }
-    //     None => {
-    //         //generate permit from bootstrap_node
-    //         // 1. to get permit json from bootstrap_node
-    //         // GET {bootstrap_node}/api/v1/certificate?name={name}
-    //         let url = format!("{bootstrap_node}/api/v1/certificate?name={name}");
-    //         let request_result = reqwest::get(url).await;
-    //         let response_text = match handle_ztm_response(request_result).await {
-    //             Ok(s) => s,
-    //             Err(s) => {
-    //                 tracing::error!(
-    //                     "GET {bootstrap_node}/api/v1/certificate?name={name} failed,{s}"
-    //                 );
-    //                 return;
-    //             }
-    //         };
-    //         let permit: ZTMUserPermit = match serde_json::from_slice(response_text.as_bytes()) {
-    //             Ok(p) => p,
-    //             Err(e) => {
-    //                 tracing::error!("{}", e);
-    //                 return;
-    //             }
-    //         };
-    //         //save to vault
-    //         write_secret(peer_id.clone().as_str(), Some(permit.to_json_map().clone())).unwrap();
-    //         permit
-    //     }
-    // };
-
+    let name = format!("{}_{}", peer_id.clone(), http_port);
     let url = format!("{bootstrap_node}/api/v1/certificate?name={name}");
     let request_result = reqwest::get(url).await;
     let response_text = match handle_ztm_response(request_result).await {
@@ -467,18 +431,20 @@ pub async fn run_ztm_client(
             url.clone(),
             peer_id_clone.clone(),
             permit.bootstraps.first().unwrap().to_string(),
+            http_port,
         )
         .await;
         interval.tick().await;
     }
 }
 
-pub async fn ping(url: String, peer_id: String, hub: String) {
+pub async fn ping(url: String, peer_id: String, hub: String, service_port: u16) {
     let mut params = HashMap::new();
     params.insert("peer_id", peer_id.clone());
     params.insert("hub", hub);
     params.insert("agent_name", peer_id.clone());
     params.insert("service_name", peer_id.clone());
+    params.insert("service_port", service_port.to_string());
     let client = reqwest::Client::new();
     let response = client.get(url.clone()).query(&params).send().await;
     let response_text = match handle_ztm_response(response).await {

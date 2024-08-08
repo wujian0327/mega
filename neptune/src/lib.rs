@@ -58,6 +58,8 @@ pub fn exit_ztm() {
 
 #[cfg(test)]
 mod tests {
+    use tokio::task;
+
     use super::*;
     #[tokio::test]
     async fn test_start_agent() {
@@ -85,6 +87,27 @@ mod tests {
     async fn test_start_hub() {
         start_hub(8888, vec![], "localhost:9999");
         thread::sleep(std::time::Duration::from_secs(3));
+    }
+
+    #[tokio::test]
+    async fn test_start_hub_and_agent() {
+        let handle = task::spawn(async {
+            start_hub(8888, vec![], "localhost:9999");
+        });
+
+        // 启动第二个异步任务
+        let handle2 = task::spawn(async {
+            let port = 7776;
+            start_agent("test.db", port);
+            let resp = reqwest::get(format!("http://127.0.0.1:{}/api/version", port))
+                .await
+                .unwrap();
+            tracing::debug!("resp: {:?}", resp);
+            assert!(resp.status().is_success());
+            tracing::info!("ztm agent start success");
+        });
+        let _ = handle.await.unwrap();
+        let _ = handle2.await.unwrap();
     }
 
     #[tokio::test]

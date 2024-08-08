@@ -95,7 +95,7 @@ pub async fn https_server(config: Config, options: HttpsOptions) {
         https_port,
     } = options.clone();
 
-    check_run_with_ztm(config.clone(), options.common.clone());
+    check_run_with_ztm(config.clone(), options.common.clone(), https_port);
 
     let app = app(config, host.clone(), https_port, options.common.clone()).await;
 
@@ -116,7 +116,7 @@ pub async fn http_server(config: Config, options: HttpOptions) {
         http_port,
     } = options.clone();
 
-    check_run_with_ztm(config.clone(), options.common.clone());
+    check_run_with_ztm(config.clone(), options.common.clone(), http_port);
 
     let app = app(config, host.clone(), http_port, options.common.clone()).await;
 
@@ -277,7 +277,7 @@ async fn put_method_router(
     }
 }
 
-pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
+pub fn check_run_with_ztm(config: Config, common: CommonOptions, http_port: u16) {
     //Mega server join a ztm mesh
     match common.bootstrap_node {
         Some(bootstrap_node) => {
@@ -292,7 +292,7 @@ pub fn check_run_with_ztm(config: Config, common: CommonOptions) {
             ztm_agent.clone().start_ztm_agent();
             thread::sleep(time::Duration::from_secs(3));
             tokio::spawn(async move {
-                run_ztm_client(bootstrap_node, config, peer_id, ztm_agent).await
+                run_ztm_client(bootstrap_node, config, peer_id, ztm_agent, http_port).await
             });
         }
         None => {
