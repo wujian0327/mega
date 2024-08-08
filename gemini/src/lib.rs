@@ -18,7 +18,7 @@ pub struct RelayGetParams {
     pub name: Option<String>,
     pub agent_name: Option<String>,
     pub service_name: Option<String>,
-    pub service_port: Option<u16>,
+    pub service_port: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -50,7 +50,7 @@ pub struct Node {
     pub mega_type: String,
     pub online: bool,
     pub last_online_time: i64,
-    pub service_port: u16,
+    pub service_port: i32,
 }
 
 #[derive(Debug)]

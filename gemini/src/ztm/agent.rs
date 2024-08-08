@@ -374,7 +374,7 @@ pub async fn run_ztm_client(
     agent: LocalZTMAgent,
     http_port: u16,
 ) {
-    let name = format!("{}_{}", peer_id.clone(), http_port);
+    let name = peer_id.clone();
     let url = format!("{bootstrap_node}/api/v1/certificate?name={name}");
     let request_result = reqwest::get(url).await;
     let response_text = match handle_ztm_response(request_result).await {
