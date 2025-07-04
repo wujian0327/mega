@@ -9,6 +9,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::decompression::RequestDecompressionLayer;
 use tower_http::trace::TraceLayer;
 
+use crate::api::{github_router, MegaApiServiceState};
+use callisto::vault;
 use common::model::{CommonHttpOptions, P2pOptions};
 use jupiter::storage::Storage;
 use mono::api::lfs::lfs_router;
@@ -16,8 +18,6 @@ use mono::api::MonoApiServiceState;
 use mono::server::https_server::{get_method_router, post_method_router, AppState};
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-
-use crate::api::{github_router, MegaApiServiceState};
 
 #[derive(Args, Clone, Debug)]
 pub struct HttpOptions {

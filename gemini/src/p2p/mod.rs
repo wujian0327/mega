@@ -8,6 +8,7 @@ use crate::p2p::client::P2PClient;
 
 pub mod client;
 pub mod relay;
+pub mod node;
 
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
